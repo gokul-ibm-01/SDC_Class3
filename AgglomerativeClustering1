@@ -1,0 +1,92 @@
+# Install required libraries
+!pip install gradio pillow
+
+# Import libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.cluster import AgglomerativeClustering
+from scipy.cluster.hierarchy import dendrogram, linkage
+import gradio as gr
+from PIL import Image
+import io
+
+# Create synthetic product data
+data = {
+    'ProductID': range(1, 21),
+    'Demand': [120, 85, 300, 450, 180, 250, 320, 150, 95, 200,
+               310, 170, 410, 230, 280, 110, 260, 140, 400, 370],
+    'DeliveryTime': [5, 7, 2, 1, 6, 3, 4, 8, 9, 5,
+                     2, 7, 1, 6, 3, 8, 4, 7, 1, 3]
+}
+df = pd.DataFrame(data)
+X = df[['Demand', 'DeliveryTime']].values
+
+# Plot dendrogram to visualize cluster hierarchy
+def plot_dendrogram():
+    plt.figure(figsize=(8, 5))
+    Z = linkage(X, method='ward')
+    dendrogram(Z)
+    plt.title('Dendrogram for Product Clustering')
+    plt.xlabel('Products')
+    plt.ylabel('Distance')
+
+    # Save plot to buffer and convert to PIL Image
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close()
+    return Image.open(buf)
+
+# Perform Hierarchical Clustering and Plot Clusters
+def hierarchical_clustering(n_clusters):
+    # Check valid number of clusters
+    if n_clusters <= 1 or n_clusters >= len(X):
+        return f"Error: Number of clusters must be between 2 and {len(X) - 1}."
+
+    # Agglomerative clustering without metric (ward uses Euclidean by default)
+    model = AgglomerativeClustering(n_clusters=n_clusters, linkage='ward')
+    y_clusters = model.fit_predict(X)
+
+    plt.figure(figsize=(8, 5))
+    plt.scatter(X[:, 0], X[:, 1], c=y_clusters, cmap='rainbow', edgecolors='k')
+    plt.title('Product Clustering Based on Demand and Delivery Time')
+    plt.xlabel('Demand (Units per Month)')
+    plt.ylabel('Delivery Time (Days)')
+
+    # Annotate product IDs
+    for i, txt in enumerate(df['ProductID']):
+        plt.annotate(txt, (X[i, 0], X[i, 1]), fontsize=9, ha='right')
+
+    # Save cluster plot to buffer and convert to PIL Image
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close()
+    return Image.open(buf)
+
+# Gradio Function to Run Clustering and Return Images
+def cluster_and_plot(n_clusters):
+    # Generate dendrogram and cluster plot
+    dendrogram_img = plot_dendrogram()
+    cluster_img = hierarchical_clustering(n_clusters)
+
+    # If cluster_img returns an error message
+    if isinstance(cluster_img, str) and "Error" in cluster_img:
+        return [dendrogram_img, None, cluster_img]
+
+    return [dendrogram_img, cluster_img, "✅ Product Clustering Completed!"]
+
+# Gradio Interface
+interface = gr.Interface(
+    fn=cluster_and_plot,
+    inputs=gr.Slider(2, 10, step=1, label="Number of Clusters"),
+    outputs=[
+        gr.Image(type="pil", label="Dendrogram"),
+        gr.Image(type="pil", label="Cluster Plot"),
+        "text"
+    ]
+)
+
+# Launch Gradio App
+interface.launch(share=True)
